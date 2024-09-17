@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using static Icyvarix.Multitool.Common.Utility;
+using static Icyvarix.Multitool.Common.StringUtilities;
 
 namespace Icyvarix.Multitool.Common
 {    
@@ -33,111 +34,20 @@ namespace Icyvarix.Multitool.Common
             UnityWorld
         }
 
-        public static (int, int) FindIndexOfStringWithLargestCommonSubstring(string targetString, string[] strings)
+        public static string[] DesiredTransformMatchingOptionStrings = new string[] { "Match Source", "Match Target", "None" };
+        public enum DesiredTransformMatchingOption
         {
-            if (strings == null || strings.Length == 0 || targetString == null || targetString.Length == 0)
-                return (-1, -1);
-
-            int n = strings.Length;
-            Dictionary<int, string> candidates = strings.Select((s, i) => new { String = s, Index = i })
-                                                        .ToDictionary(x => x.Index, x => x.String);
-
-            int biggestMaxLength = -1; // The biggest substring we found during this search.
-
-            while (true)
-            {
-                // Dictionary to hold the length of the longest common substrings and the substrings themselves
-                Dictionary<int, (int Length, string Substring)> substrings = candidates.ToDictionary(
-                    pair => pair.Key,
-                    pair => FindLongestCommonSubstring(targetString, pair.Value)
-                );
-
-                // Find the maximum length of substrings found
-                int maxLength = substrings.Max(pair => pair.Value.Length);
-                biggestMaxLength = Mathf.Max(biggestMaxLength, maxLength);
-                
-                // Did not find a substring, so we failed to find a match.
-                if (maxLength == 0)
-                {
-                    return (-1, biggestMaxLength);
-                }
-
-                // Filter the candidates that have the maximum substring length
-                var maxCandidates = substrings.Where(pair => pair.Value.Length == maxLength)
-                                            .ToDictionary(pair => pair.Key, pair => candidates[pair.Key]);
-
-                // Should be impossible...but just in case
-                if (maxCandidates.Count == 0)
-                    RaiseCritialError("[Logic Failure] Got 0 maxCandidates for string " + targetString + "!  Yell at Icy.");
-
-                // If only one candidate remains, return its index
-                if (maxCandidates.Count == 1)
-                {
-                    return (maxCandidates.First().Key, biggestMaxLength);
-                }
-
-                // If all remaining candidates are identical, we failed to find a clear winner.
-                else if (maxCandidates.All(kvp => kvp.Value == maxCandidates.First().Value))
-                {
-                    return (-1, biggestMaxLength);
-                }
-                else
-                {
-                    // Blank out all values in candidates that are not in maxCandidates
-                    foreach (var kvp in candidates.ToList())
-                    {
-                        if (!maxCandidates.ContainsKey(kvp.Key))
-                        {
-                            candidates[kvp.Key] = ""; // Remove from the running but don't change the index.
-                        }
-                    }
-
-                    // If we have multiple candidates, we need a tiebreaker.
-                    // Update candidates by removing the found substrings and continue
-                    foreach (var kvp in maxCandidates)
-                    {
-                        string currentString = kvp.Value;
-                        string substringToRemove = substrings[kvp.Key].Substring;
-
-                        // Make sure no infinite loops happen
-                        if (substringToRemove.Length == 0)
-                        {
-                            RaiseCritialError("[Logic Failure] Tried to remove substring of length 0 while scanning " + targetString + "! Icy doesn't know what they're doing! Yell at them!");
-                        }
-
-                        candidates[kvp.Key] = currentString.Replace(substringToRemove, "");
-                    }
-                }
-            }
+            MatchSource,
+            MatchTarget,
+            None
         }
 
-        public static (int Length, string Substring) FindLongestCommonSubstring(string s1, string s2)
+        public static string[] TransformRepositionOptionStrings = new string[] { "Subject", "Target", "None" };
+        public enum TransformRepositionOption
         {
-            int[,] lengths = new int[s1.Length + 1, s2.Length + 1];
-            int greatestLength = 0;
-            string longestSubstring = "";
-
-            for (int i = 1; i <= s1.Length; i++)
-            {
-                for (int j = 1; j <= s2.Length; j++)
-                {
-                    if (s1[i - 1] == s2[j - 1])
-                    {
-                        lengths[i, j] = lengths[i - 1, j - 1] + 1;
-                        if (lengths[i, j] > greatestLength)
-                        {
-                            greatestLength = lengths[i, j];
-                            longestSubstring = s1.Substring(i - greatestLength, greatestLength);
-                        }
-                    }
-                    else
-                    {
-                        lengths[i, j] = 0;
-                    }
-                }
-            }
-
-            return (greatestLength, longestSubstring);
+            RepositionSubject,
+            RepositionTarget,
+            None
         }
 
         public static Dictionary<Transform, Transform> MapTransformChildren(Transform receiver, Transform target, DesiredMatchOption option, List<Transform> ignoreTransforms)
@@ -299,7 +209,7 @@ namespace Icyvarix.Multitool.Common
                 {
                     targetChildNames[i] = "";
                 }
-                else if (ignoreTransforms.Contains(target.GetChild(i))) // NEver try to match to excluded transforms.
+                else if (ignoreTransforms.Contains(target.GetChild(i))) // Never try to match to excluded transforms.
                 {
                     targetChildNames[i] = "";
                 }
@@ -316,6 +226,215 @@ namespace Icyvarix.Multitool.Common
             }
 
             return FindIndexOfStringWithLargestCommonSubstring(receiver_child.name, targetChildNames);
+        }
+
+        // Returns a list of all children of the given list, without including any members of the list.
+        public static List<Transform> GetImmediateHierarchyChildren(List<Transform> hierarchy)
+        {
+            List<Transform> children = new List<Transform>();
+
+            foreach (Transform parent in hierarchy)
+            {
+                for (int i = 0; i < parent.childCount; i++)
+                {
+                    Transform child = parent.GetChild(i);
+
+                    if (!hierarchy.Contains(child) && !children.Contains(child))
+                    {
+                        children.Add(child);
+                    }
+                }
+            }
+
+            return children;
+        }
+
+        // Makes sure all transforms are in a continious hierarchy, meaning you can traverse the tree from any node to any other node without crossing a non-member.
+        public static List<Transform> GetTransformsNeededForCompleteTree(List<Transform> transforms, out bool isConnectedTree)
+        {
+            if (transforms == null || transforms.Count == 0)
+            {
+                isConnectedTree = true;
+                return null;
+            }
+
+            // Find the root nodes in the list (nodes whose parents are not in the list)
+            List<Transform> roots = transforms.FindAll(transform => transform.parent == null || !transforms.Contains(transform.parent));
+
+            // There should be exactly one root in a complete tree, so if we have one we're good.
+            if (roots.Count == 1)
+            {
+                isConnectedTree = true;
+                return null;
+            }
+
+            // If we have more than one root, we need to find the missing transforms.
+            List<Transform> missingTransforms = new List<Transform>();
+
+            int connectionFailures = 0;
+
+            foreach (var root in roots)
+            {
+                List<Transform> seenTransforms = new List<Transform>();
+
+                Transform current = root.parent;
+                bool foundExistingTransform = false;
+                while (current != null)
+                {
+                    if (transforms.Contains(current))
+                    {
+                        foundExistingTransform = true;
+                        break;
+                    }
+
+                    if (!seenTransforms.Contains(current))
+                    {
+                        seenTransforms.Add(current);
+                    }
+                    current = current.parent;
+                }
+
+                if (foundExistingTransform)
+                {
+                    missingTransforms.AddRange(seenTransforms);
+                }
+                else
+                {
+                    connectionFailures++;
+                }
+            }
+
+            // The highest tree root will always get to the top of the hierarchy, so we can ignore it.
+            if (connectionFailures > 1)
+            {
+                isConnectedTree = false;
+                return null;
+            }
+
+            isConnectedTree = true;
+            return missingTransforms;
+        }
+
+        // Returns a list of all children, all the way down, of the given list, without including any members of the list.
+        public static List<Transform> GetAllChildren(List<Transform> transformList)
+        {
+            List<Transform> children = new List<Transform>();
+
+            foreach (Transform parent in transformList)
+            {
+                Transform[] allChildren = parent.GetComponentsInChildren<Transform>();
+
+                foreach (Transform child in allChildren)
+                {
+                    if (!transformList.Contains(child) && !children.Contains(child))
+                    {
+                        children.Add(child);
+                    }
+                }
+            }
+
+            return children;
+        }
+
+        public static List<Transform> AddAllChildren(List<Transform> transformList)
+        {
+            List<Transform> children = GetAllChildren(transformList);
+
+            // Add original list to children.
+            foreach (Transform parent in transformList)
+            {
+                if (!children.Contains(parent))
+                {
+                    children.Add(parent);
+                }
+            }
+
+            return children;
+        }
+
+        // Reparents the children of the keys of reparentMap to the values of reparentMap.
+        public static void ReparentChildren(Dictionary<Transform, Transform> reparentMap, List<Transform> ignoreTransforms)
+        {
+            List<Transform> children = GetAllChildren(reparentMap.Keys.ToList());
+
+            foreach (Transform child in children)
+            {
+                if (ignoreTransforms.Contains(child))
+                {
+                    continue; // Never try to reparent ignored transforms.
+                }
+
+                if (reparentMap.ContainsKey(child.parent))
+                {
+                    Undo.SetTransformParent(child, reparentMap[child.parent], "Reparenting Children");
+                }
+            }
+        }
+
+        public static List<Transform> ExtractTransformsWithPrefix(List<Transform> transforms, string prefix)
+        {
+            List<Transform> extracted = new List<Transform>();
+
+            for (int i = transforms.Count - 1; i >= 0; i--)
+            {
+                if (transforms[i].name.StartsWith(prefix))
+                {
+                    transforms.RemoveAt(i);
+                    extracted.Add(transforms[i]);
+                }
+            }
+
+            return extracted;
+        }
+
+        // Matches each key in matchMap to the corresponding transform in the value of matchMap.
+        // Sets global position, rotation, and scale of the key to the value.
+        // Always does parents first, so that children are unaffected by their movements.
+        public static void MatchTransforms(Dictionary<Transform, Transform> matchMap)
+        {
+            // Sort keys by depth to ensure parents are processed before children
+            var sortedKeys = matchMap.Keys.OrderBy(t => GetTransformDepth(t)).ToList();
+
+            Undo.RecordObjects(sortedKeys.ToArray(), "Match Transforms"); // Record all objects in the list.
+
+            foreach (Transform key in sortedKeys)
+            {
+                if (matchMap.TryGetValue(key, out Transform target))
+                {
+                    // Match global position, rotation, and scale
+                    key.position = target.position;
+                    key.rotation = target.rotation;
+                    key.localScale = GetRelativeLocalScale(key.parent, target.localScale);
+                }
+            }
+        }
+
+        public static int GetTransformDepth(Transform t)
+        {
+            int depth = 0;
+            while (t.parent != null)
+            {
+                depth++;
+                t = t.parent;
+            }
+            return depth;
+        }
+
+        // Helper to calculate local scale based on the target global scale
+        private static Vector3 GetRelativeLocalScale(Transform parent, Vector3 globalScale)
+        {
+            if (parent == null)
+            {
+                return globalScale;
+            }
+            else
+            {
+                // Calculate local scale by considering parent's scale
+                return new Vector3(
+                    globalScale.x / parent.lossyScale.x,
+                    globalScale.y / parent.lossyScale.y,
+                    globalScale.z / parent.lossyScale.z);
+            }
         }
     }
 }

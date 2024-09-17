@@ -7,6 +7,7 @@ using VRC.SDK3.Dynamics.Constraint.Components;
 using VRC.Dynamics;
 using static Icyvarix.Multitool.Common.TransformUtilities;
 using static Icyvarix.Multitool.Common.Utility;
+using static Icyvarix.Multitool.Common.GUIUtilities;
 
 namespace Icyvarix.Multitool.Tools
 {
@@ -41,7 +42,6 @@ namespace Icyvarix.Multitool.Tools
         private const float baseHeight = 420;
         private const float elementHeight = 23;
 
-        private static string noodleImagePath = "Packages/com.icyvarix.icymultitool/Resources/noodle.png";
         private static string logoPath = "Packages/com.icyvarix.icymultitool/Resources/ChainConstrainLogo.png";
         private Texture noodleDragon;
         private static Texture2D windowIcon;
@@ -58,25 +58,8 @@ namespace Icyvarix.Multitool.Tools
 
         void OnEnable()
         {
-            noodleDragon = AssetDatabase.LoadAssetAtPath<Texture>(noodleImagePath);
-
-            reorderableIgnoreList = new ReorderableList(ignoreTransforms, typeof(Transform), true, true, true, true);
-            reorderableIgnoreList.drawHeaderCallback = (Rect rect) => {
-                EditorGUI.LabelField(rect, new GUIContent("Ignore Transforms", "Transforms to skip over when applying constraints.  Also skips their children."));
-            };
-
-            reorderableIgnoreList.drawElementCallback = (Rect rect, int index, bool isActive, bool isFocused) => {
-                ignoreTransforms[index] = (Transform)EditorGUI.ObjectField(
-                    new Rect(rect.x, rect.y, rect.width, EditorGUIUtility.singleLineHeight),
-                    ignoreTransforms[index],
-                    typeof(Transform),
-                    true
-                );
-            };
-
-            reorderableIgnoreList.onAddCallback = (ReorderableList list) => {
-                list.list.Add(null);  // Add null instead of trying to create a new Transform
-            };
+            noodleDragon = LoadNoodleTexture();
+            reorderableIgnoreList = InitReorderableTransformList(ignoreTransforms, "Ignore Transforms", "Transforms to skip over when applying constraints.  Also skips their children.");
         }
 
         private void OnGUI()

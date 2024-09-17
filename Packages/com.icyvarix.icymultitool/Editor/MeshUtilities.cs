@@ -1,0 +1,338 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEditor;
+using UnityEngine;
+using static Icyvarix.Multitool.Common.Utility;
+using static Icyvarix.Multitool.Common.StringUtilities;
+using static Icyvarix.Multitool.Common.TransformUtilities;
+
+namespace Icyvarix.Multitool.Common
+{   
+    public class MeshUtilities
+    {
+        public static string[] DesiredBoneMatchOptionStrings = new string[] { "By Exact Name", "By Closest Name" };
+        public enum DesiredBoneMatchOption
+        {
+            ByExactName,
+            ByClosestName
+        }
+
+        public static string[] PostRebindOperationsStrings = new string[] { "Reparent + Cleanup", "Reparent Children", "None" };
+        public enum PostRebindOperations
+        {
+            ReparentChildrenAndCleanup,
+            ReparentChildren,
+            None
+        }
+
+        public class BoneMatchException : System.Exception
+        {
+            public BoneMatchException(string message) : base(message) { }
+        }
+
+        public static void RaiseBoneMatchError(string message)
+        {
+            // Present a popup to the user with the error and then throw an exception
+            EditorUtility.DisplayDialog("Matching Error", message, "Unfortunate");
+
+            throw new BoneMatchException(message);
+        }
+
+        public static List<Transform> GetMeshBonesAsList(SkinnedMeshRenderer skinnedMeshRenderer, List<Transform> ignoreTransforms = null, string requiredPrefix = null)
+        {
+            if (skinnedMeshRenderer == null)
+            {
+                RaiseCritialError("[Logic Failure] SkinnedMeshRenderer is null in mesh bone extraction function.");
+            }
+
+            List<Transform> boneList = new List<Transform>();
+            boneList.AddRange(skinnedMeshRenderer.bones);
+
+            if (ignoreTransforms != null)
+            {
+                boneList = boneList.Except(ignoreTransforms).ToList();
+            }
+
+            // Make sure all mesh bones start with the required prefix.
+            if (requiredPrefix != null)
+            {
+                List<Transform> invalidBones = boneList.Where(bone => !bone.name.StartsWith(requiredPrefix)).ToList();
+
+                // Display an error if any bones don't start with the required prefix, that lists all the names.
+                if (invalidBones.Count > 0)
+                {
+                    RaiseBoneMatchError($"Not all mesh bones start with '{requiredPrefix}'! Invalid bones: {string.Join(", ", invalidBones.Select(bone => bone.name))}");
+                }
+            }
+
+            return boneList;
+        }
+
+        public static Dictionary<Transform, Transform> MatchToMeshBones(SkinnedMeshRenderer skinnedMeshRenderer, List<Transform> targetBones, DesiredBoneMatchOption boneMatchOption, List<Transform> ignoreTransforms = null, string targetBonePrefix = null, string meshBonePrefix = null)
+        {
+            if (skinnedMeshRenderer == null)
+            {
+                RaiseCritialError("[Logic Failure] SkinnedMeshRenderer is null in mesh bone extraction function.");
+            }
+
+            if (targetBones == null || targetBones.Count == 0)
+            {
+                RaiseCritialError("[Logic Failure] Target bones are null or empty in mesh bone extraction function.");
+            }
+
+            // Ignore transforms always include all their children, even if we're searching by name.
+            if (ignoreTransforms != null)
+            {
+                ignoreTransforms = AddAllChildren(ignoreTransforms);
+            }
+
+            List<Transform> meshBones = GetMeshBonesAsList(skinnedMeshRenderer, ignoreTransforms, meshBonePrefix);
+
+            // Two mesh bones should never have the same name.
+            if (meshBones.Count != meshBones.Select(bone => bone.name).Distinct().Count())
+            {
+                RaiseCritialError("[Logic Failure] Mesh bones have duplicate names in mesh bone extraction function.");
+            }
+
+            // Nor should two target bones
+            if (targetBones.Count != targetBones.Select(bone => bone.name).Distinct().Count())
+            {
+                RaiseCritialError("[Logic Failure] Target bones have duplicate names in mesh bone extraction function.");
+            }
+
+            // Get a List out of the skinnedMeshRenderer's bone names and the target bone names.
+            List<string> skinnedMeshBoneNames = meshBones.Select(bone => bone.name).ToList();
+            List<string> targetBoneNames = targetBones.Select(bone => bone.name).ToList();
+
+            // Strip the prefixes from the bone names if they are defined.
+            if (targetBonePrefix != null)
+            {
+                if (!StripDefinedPrefix(targetBoneNames, targetBonePrefix))
+                {
+                    RaiseCritialError("[Logic Failure] Failed to strip target bone prefix in mesh bone extraction function.  Not all target bones have the required prefix.");
+                }
+            }
+
+            if (meshBonePrefix != null)
+            {
+                if (!StripDefinedPrefix(skinnedMeshBoneNames, meshBonePrefix))
+                {
+                    RaiseCritialError("[Logic Failure] Failed to strip mesh bone prefix in mesh bone extraction function.  Not all mesh bones have the required prefix.");
+                }
+            }
+
+            Dictionary<Transform, Transform> boneMap = new Dictionary<Transform, Transform>();
+
+            if (boneMatchOption == DesiredBoneMatchOption.ByClosestName)
+            {
+                Dictionary<string, string> boneNameMap = MatchByLongestSubstring(skinnedMeshBoneNames, targetBoneNames);
+
+                foreach (Transform bone in skinnedMeshRenderer.bones)
+                {
+                    string boneName = bone.name;
+
+                    if (meshBonePrefix != null)
+                    {
+                        boneName = boneName.Substring(meshBonePrefix.Length);
+                    }
+
+                    if (boneNameMap.ContainsKey(boneName))
+                    {
+                        boneMap.Add(bone, targetBones[targetBoneNames.IndexOf(boneNameMap[boneName])]);
+                    }
+                }
+            }
+            else if (boneMatchOption == DesiredBoneMatchOption.ByExactName)
+            {
+                for (int i = 0; i < skinnedMeshBoneNames.Count; i++)
+                {
+                    string boneName = skinnedMeshBoneNames[i];
+                    Transform bone = meshBones[i];
+
+                    if (targetBoneNames.Contains(boneName))
+                    {
+                        boneMap.Add(bone, targetBones[targetBoneNames.IndexOf(boneName)]);
+                    }
+                }
+            }
+            else
+            {
+                RaiseCritialError("[Logic Failure] Invalid match option in mesh bone extraction function.");
+            }
+
+            return boneMap;
+        }
+
+        // Rebinds the bones of a SkinnedMeshRenderer, replacing all keys of replaceMap with their corresponding values
+        // All keys in replaceMap must be in the SkinnedMeshRenderer's bones array
+        public static void RebindBones(SkinnedMeshRenderer skinnedMeshRenderer, Dictionary<Transform, Transform> replaceMap)
+        {
+            if (skinnedMeshRenderer == null)
+            {
+                RaiseCritialError("[Logic Failure] SkinnedMeshRenderer is null in mesh rebind function.");
+            }
+
+            if (replaceMap == null)
+            {
+                RaiseCritialError("[Logic Failure] Replace map is null in mesh rebind function.");
+            }
+
+            Transform[] oldBones = skinnedMeshRenderer.bones;
+            Transform[] newBones = new Transform[oldBones.Length];
+            List<Transform> matchedBones = new List<Transform>();
+
+            for (int i = 0; i < oldBones.Length; i++)
+            {
+                if (replaceMap.ContainsKey(oldBones[i]))
+                {
+                    newBones[i] = replaceMap[oldBones[i]];
+                    matchedBones.Add(oldBones[i]);
+                }
+                else
+                {
+                    newBones[i] = oldBones[i]; // Fallback to old bone
+                }
+            }
+
+            // Make sure we matched all bones in replaceMap.
+            List<Transform> unmatchedBones = replaceMap.Keys.Except(matchedBones).ToList();
+
+            if (unmatchedBones.Count > 0)
+            {
+                RaiseCritialError("[Logic Failure] Failed to match all bones in replace map. Unmatched bones: " + unmatchedBones.Count);
+            }
+
+            //Register undo operation and then perform the rebind
+            Undo.RecordObject(skinnedMeshRenderer, "Rebind Bones");
+
+            skinnedMeshRenderer.bones = newBones;
+        }
+
+        public static void RebindAndAdjustBones(SkinnedMeshRenderer skinnedMeshRenderer, Dictionary<Transform, Transform> rebindMap, PostRebindOperations postRebindOperations, TransformRepositionOption repositionBones, List<Transform> ignoreTransforms = null)
+        {
+            Undo.SetCurrentGroupName("Rebind Bones");
+            int undoGroup = Undo.GetCurrentGroup();
+
+            if (repositionBones == TransformRepositionOption.RepositionSubject)
+            {
+                MatchTransforms(rebindMap);
+            }
+            else if (repositionBones == TransformRepositionOption.RepositionTarget)
+            {
+                Dictionary<Transform, Transform> rebindMapFlipped = rebindMap.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+
+                MatchTransforms(rebindMapFlipped);
+            }
+
+            RebindBones(skinnedMeshRenderer, rebindMap);
+
+            // I don't know why but weird issues happen without this seperating the rebinding and the reparenting.
+            Undo.CollapseUndoOperations(undoGroup);
+
+            if (postRebindOperations != PostRebindOperations.None)
+            {
+                if (postRebindOperations == PostRebindOperations.ReparentChildren || postRebindOperations == PostRebindOperations.ReparentChildrenAndCleanup)
+                {
+                    ReparentChildren(rebindMap, ignoreTransforms);
+                }
+
+                // Remove freshly unbound bones if we're cleaning up.
+                if (postRebindOperations == PostRebindOperations.ReparentChildrenAndCleanup)
+                {
+                    // First order rebindmap keys by hierarchy depth, so we can destroy children before parents.
+                    List<Transform> orderedBones = rebindMap.Keys.OrderByDescending(t => GetTransformDepth(t)).ToList();
+
+                    // Remove all bones that are keys in the rebind map, as they now have no skinned mesh renderer bound to them.
+                    // Make sure to do this through the undo system so the user can undo the operation.
+                    // Make sure each bone has no children before destruction.
+                    foreach (Transform bone in orderedBones)
+                    {
+                        if (bone.childCount > 0)
+                        {
+                            // Just print console warning, we're mid-operation so we can't throw an exception.
+                            Debug.LogWarning($"Bone '{bone.name}' has children and will not be removed.");
+                        }
+                        else
+                        {
+                            Undo.DestroyObjectImmediate(bone.gameObject);
+                        }
+                    }
+                }
+
+                Undo.CollapseUndoOperations(undoGroup);
+            }
+        }
+
+        public static Dictionary<Transform, Transform> GenerateAndValidateRebindMap(SkinnedMeshRenderer skinnedMeshRenderer, List<Transform> targetTransforms, DesiredBoneMatchOption boneMatchOption, PostRebindOperations postRebindOperations, List<Transform> ignoreTransforms, string targetBonePrefix, string meshBonePrefix)
+        {
+            List<Transform> targetBones = new List<Transform>(targetTransforms);
+            targetBones = AddAllChildren(targetBones);
+
+            // Print all target bones
+            Debug.Log($"Total target bones: {targetBones.Count}");
+
+            List<Transform> fullIgnoreTransforms = new List<Transform>(ignoreTransforms);
+            fullIgnoreTransforms = AddAllChildren(fullIgnoreTransforms);
+
+            if (targetBonePrefix != null && targetBonePrefix.Length > 0)
+            {
+                targetBones = ExtractTransformsWithPrefix(targetBones, targetBonePrefix);
+            }
+
+            // Remove ignoreTransforms from targetbones
+            targetBones = targetBones.Except(fullIgnoreTransforms).ToList();
+
+            // Make sure no two target bones have the same name.
+            if (targetBones.Count != targetBones.Select(bone => bone.name).Distinct().Count())
+            {
+                string duplicateNames = string.Join(", ", targetBones.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
+                // Raise match error with a message that lists all the duplicate names
+                RaiseBoneMatchError($"Target bones have duplicate names!\nDuplicate names: {duplicateNames}");
+            }
+
+            List<Transform> meshBones = GetMeshBonesAsList(skinnedMeshRenderer, fullIgnoreTransforms, meshBonePrefix);
+
+            // Two mesh bones should never have the same name.
+            if (meshBones.Count != meshBones.Select(bone => bone.name).Distinct().Count())
+            {
+                string duplicateNames = string.Join(", ", meshBones.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
+                // Raise match error with a message that lists all the duplicate names
+                RaiseBoneMatchError($"Mesh bones have duplicate names!\nDuplicate names: {duplicateNames}");
+            }
+
+            // Print total mesh bones
+            Debug.Log($"Total eligible mesh bones: {meshBones.Count}");
+
+            // Print total target bones
+            Debug.Log($"Total eligible target bones: {targetBones.Count}");
+
+            try
+            {
+                // Attempt to match target transforms to skinned mesh renderer bones
+                Dictionary<Transform, Transform> rebindMap = MatchToMeshBones(skinnedMeshRenderer, targetBones, boneMatchOption, ignoreTransforms, targetBonePrefix, meshBonePrefix);
+
+                // Ensure all transforms in the mesh are in a continious hierarchy
+                // If they're not, it's going to mess up our child reparenting logic.
+                if (postRebindOperations == PostRebindOperations.ReparentChildren || postRebindOperations == PostRebindOperations.ReparentChildrenAndCleanup)
+                {
+                    bool isConnected;
+                    List<Transform> missingTransforms = GetTransformsNeededForCompleteTree(rebindMap.Keys.ToList(), out isConnected);
+
+                    if (!isConnected)
+                    {
+                        RaiseBoneMatchError($"Not all mesh bones have a common root!\nSeperate hierarchies are not supported when reparent children mode is active.");
+                    }
+
+                    if (missingTransforms != null)
+                    {
+                        RaiseBoneMatchError($"Not all mesh bones are in a continious hierarchy!\nHoles are not supported when reparent children mode is active.\nMissing transforms: " + string.Join(", ", missingTransforms.Select(t => t.name)));
+                    }
+                }
+
+                return rebindMap;
+            }
+            catch ( BoneMatchException ) { return null; }
+        }
+    }
+}
