@@ -57,12 +57,6 @@ namespace Icyvarix.Multitool.Common
                 return new Dictionary<Transform, Transform> {}; // No possible matches.
             }
 
-            // Don't do all the logic to deduce the singular possible match.
-            if (receiver.childCount == 1 && target.childCount == 1)
-            {
-                return new Dictionary<Transform, Transform> { { receiver.GetChild(0), target.GetChild(0) } };
-            }
-
             return option == DesiredMatchOption.ByName ? MapTransformChildrenByName(receiver, target, ignoreTransforms) : MapTransformChildrenByIndex(receiver, target, ignoreTransforms);
         }
 
@@ -404,7 +398,7 @@ namespace Icyvarix.Multitool.Common
                     // Match global position, rotation, and scale
                     key.position = target.position;
                     key.rotation = target.rotation;
-                    key.localScale = GetRelativeLocalScale(key.parent, target.localScale);
+                    key.localScale = GetRelativeLocalScale(key.parent, target.lossyScale);
                 }
             }
         }

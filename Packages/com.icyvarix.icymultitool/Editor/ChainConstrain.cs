@@ -33,7 +33,7 @@ namespace Icyvarix.Multitool.Tools
         private TopologyEnforcementSetting topologyEnforcementSetting = 0;
         private float targetSourceWeight = 1.0f;
         private float receiverSourceWeight = 0.0f;
-        private List<Transform> ignoreTransforms = new List<Transform>();
+        private List<Transform> ignoreTransformsGUI = new List<Transform>();
         private ReorderableList reorderableIgnoreList;
 
         // --------------------------------------------------------------
@@ -59,12 +59,12 @@ namespace Icyvarix.Multitool.Tools
         void OnEnable()
         {
             noodleDragon = LoadNoodleTexture();
-            reorderableIgnoreList = InitReorderableTransformList(ignoreTransforms, "Ignore Transforms", "Transforms to skip over when applying constraints.  Also skips their children.");
+            reorderableIgnoreList = InitReorderableGUIList<Transform>(ignoreTransformsGUI, "Ignore Transforms", "Transforms to skip over when applying constraints.  Also skips their children.");
         }
 
         private void OnGUI()
         {
-            this.minSize = new Vector2(340, baseHeight + (Mathf.Max((showAdvancedSettings ? 4 : 0) + ignoreTransforms.Count - 1, 0) * elementHeight));
+            this.minSize = new Vector2(340, baseHeight + (Mathf.Max((showAdvancedSettings ? 4 : 0) + ignoreTransformsGUI.Count - 1, 0) * elementHeight));
 
             // Stick me in there first so all the stuff gets drawn over me.
             if (noodleDragon != null)
@@ -114,7 +114,10 @@ namespace Icyvarix.Multitool.Tools
                     return;
                 }
 
-                if (!ValidateBoneHierarchy(receiverRoot, targetRoot))
+                List<Transform> cleanedIgnoreTransforms = new List<Transform>(ignoreTransformsGUI);
+                cleanedIgnoreTransforms.RemoveAll(t => t == null);
+
+                if (!ValidateBoneHierarchy(receiverRoot, targetRoot, cleanedIgnoreTransforms))
                 {
                     Debug.Log("Failed to validate bone hierarchy.  Constraints not applied.");
                 }
@@ -123,7 +126,7 @@ namespace Icyvarix.Multitool.Tools
                     Undo.SetCurrentGroupName("Chain Constrain");
                     int undoGroup = Undo.GetCurrentGroup();
 
-                    ApplyConstraints(receiverRoot, targetRoot);
+                    ApplyConstraints(receiverRoot, targetRoot, cleanedIgnoreTransforms);
 
                     Undo.CollapseUndoOperations(undoGroup);
                     Debug.Log("Constraints applied successfully.");
@@ -146,17 +149,17 @@ namespace Icyvarix.Multitool.Tools
         }
 
         // Recursive function to validate the bone hierarchy.  Throws an exception if the hierarchies don't match.
-        private bool ValidateBoneHierarchy(Transform receiver, Transform target)
+        private bool ValidateBoneHierarchy(Transform receiver, Transform target, List<Transform> ignoreTransforms)
         {
             try
             {
                 if (topologyEnforcementSetting == TopologyEnforcementSetting.Exact)
                 {
-                    ValidateExactBoneHierarchy(receiver, target);
+                    ValidateExactBoneHierarchy(receiver, target, ignoreTransforms);
                 }
                 else if (topologyEnforcementSetting == TopologyEnforcementSetting.ReceiverSubset)
                 {
-                    ValidateReceiverSubsetBoneHierarchy(receiver, target);
+                    ValidateReceiverSubsetBoneHierarchy(receiver, target, ignoreTransforms);
                 }
                 else
                 {
@@ -168,7 +171,7 @@ namespace Icyvarix.Multitool.Tools
             catch ( ValidateException ) { return false; }
         }
 
-        private void ValidateExactBoneHierarchy(Transform receiver, Transform target)
+        private void ValidateExactBoneHierarchy(Transform receiver, Transform target, List<Transform> ignoreTransforms)
         {
             // Count how many receiver children were in the ignoreTransforms list
             int ignoredRecvChildren = 0;
@@ -212,11 +215,11 @@ namespace Icyvarix.Multitool.Tools
             // Now we can iterate through the child map and recursively check the hierarchy
             foreach (var pair in childMap)
             {
-                ValidateExactBoneHierarchy(pair.Key, pair.Value);
+                ValidateExactBoneHierarchy(pair.Key, pair.Value, ignoreTransforms);
             }
         }
 
-        private void ValidateReceiverSubsetBoneHierarchy(Transform receiver, Transform target)
+        private void ValidateReceiverSubsetBoneHierarchy(Transform receiver, Transform target, List<Transform> ignoreTransforms)
         {
             // First create the dictionary mapping the receiver children to the target children
             Dictionary<Transform, Transform> childMap = MapTransformChildren(receiver, target, childMatchOption, ignoreTransforms);
@@ -243,12 +246,12 @@ namespace Icyvarix.Multitool.Tools
             // Now we can iterate through the child map and recursively check the hierarchy
             foreach (var pair in childMap)
             {
-                ValidateReceiverSubsetBoneHierarchy(pair.Key, pair.Value);
+                ValidateReceiverSubsetBoneHierarchy(pair.Key, pair.Value, ignoreTransforms);
             }
         }
 
         // Recursive function to apply constraints to the bone hierarchy.
-        private void ApplyConstraints(Transform receiver, Transform target)
+        private void ApplyConstraints(Transform receiver, Transform target, List<Transform> ignoreTransforms)
         {
             if ( ignoreTransforms.Contains(receiver) || ignoreTransforms.Contains(target) )
             {
@@ -260,7 +263,7 @@ namespace Icyvarix.Multitool.Tools
 
             foreach (var pair in childMap)
             {
-                ApplyConstraints(pair.Key, pair.Value);
+                ApplyConstraints(pair.Key, pair.Value, ignoreTransforms);
             }
 
             // Record our state before modifying it.

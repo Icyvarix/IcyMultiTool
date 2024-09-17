@@ -69,11 +69,32 @@ namespace Icyvarix.Multitool.Common
             return boneList;
         }
 
-        public static Dictionary<Transform, Transform> MatchToMeshBones(SkinnedMeshRenderer skinnedMeshRenderer, List<Transform> targetBones, DesiredBoneMatchOption boneMatchOption, List<Transform> ignoreTransforms = null, string targetBonePrefix = null, string meshBonePrefix = null)
+        public static List<Transform> GetAllMeshBonesAsList(List<SkinnedMeshRenderer> skinnedMeshRenderers, List<Transform> ignoreTransforms = null, string requiredPrefix = null)
         {
-            if (skinnedMeshRenderer == null)
+            List<Transform> meshBones = new List<Transform>();
+
+            // Add all skinned mesh renderer bones to the mesh bones list, if they're not already in there.
+            for (int i = 0; i < skinnedMeshRenderers.Count; i++)
             {
-                RaiseCritialError("[Logic Failure] SkinnedMeshRenderer is null in mesh bone extraction function.");
+                List<Transform> currentMeshBones = GetMeshBonesAsList(skinnedMeshRenderers[i], ignoreTransforms, requiredPrefix);
+                if (i == 0)
+                {
+                    meshBones = currentMeshBones;
+                }
+                else
+                {
+                    meshBones = meshBones.Intersect(currentMeshBones).ToList();
+                }
+            }
+
+            return meshBones;
+        }
+
+        public static Dictionary<Transform, Transform> MatchToMeshBones(List<SkinnedMeshRenderer> skinnedMeshRenderers, List<Transform> targetBones, DesiredBoneMatchOption boneMatchOption, List<Transform> ignoreTransforms = null, string targetBonePrefix = null, string meshBonePrefix = null)
+        {
+            if (skinnedMeshRenderers == null || skinnedMeshRenderers.Count == 0)
+            {
+                RaiseCritialError("[Logic Failure] SkinnedMeshRenderers is null or empty in mesh bone extraction function.");
             }
 
             if (targetBones == null || targetBones.Count == 0)
@@ -87,7 +108,7 @@ namespace Icyvarix.Multitool.Common
                 ignoreTransforms = AddAllChildren(ignoreTransforms);
             }
 
-            List<Transform> meshBones = GetMeshBonesAsList(skinnedMeshRenderer, ignoreTransforms, meshBonePrefix);
+            List<Transform> meshBones = GetAllMeshBonesAsList(skinnedMeshRenderers, ignoreTransforms, meshBonePrefix);
 
             // Two mesh bones should never have the same name.
             if (meshBones.Count != meshBones.Select(bone => bone.name).Distinct().Count())
@@ -128,14 +149,10 @@ namespace Icyvarix.Multitool.Common
             {
                 Dictionary<string, string> boneNameMap = MatchByLongestSubstring(skinnedMeshBoneNames, targetBoneNames);
 
-                foreach (Transform bone in skinnedMeshRenderer.bones)
+                for (int i = 0; i < skinnedMeshBoneNames.Count; i++)
                 {
-                    string boneName = bone.name;
-
-                    if (meshBonePrefix != null)
-                    {
-                        boneName = boneName.Substring(meshBonePrefix.Length);
-                    }
+                    string boneName = skinnedMeshBoneNames[i];
+                    Transform bone = meshBones[i];
 
                     if (boneNameMap.ContainsKey(boneName))
                     {
@@ -165,8 +182,8 @@ namespace Icyvarix.Multitool.Common
         }
 
         // Rebinds the bones of a SkinnedMeshRenderer, replacing all keys of replaceMap with their corresponding values
-        // All keys in replaceMap must be in the SkinnedMeshRenderer's bones array
-        public static void RebindBones(SkinnedMeshRenderer skinnedMeshRenderer, Dictionary<Transform, Transform> replaceMap)
+        // Returns all keys in replaceMap that are not in the skinnedMeshRenderer's bones array.
+        public static List<Transform> RebindBones(SkinnedMeshRenderer skinnedMeshRenderer, Dictionary<Transform, Transform> replaceMap)
         {
             if (skinnedMeshRenderer == null)
             {
@@ -198,18 +215,15 @@ namespace Icyvarix.Multitool.Common
             // Make sure we matched all bones in replaceMap.
             List<Transform> unmatchedBones = replaceMap.Keys.Except(matchedBones).ToList();
 
-            if (unmatchedBones.Count > 0)
-            {
-                RaiseCritialError("[Logic Failure] Failed to match all bones in replace map. Unmatched bones: " + unmatchedBones.Count);
-            }
-
             //Register undo operation and then perform the rebind
             Undo.RecordObject(skinnedMeshRenderer, "Rebind Bones");
 
             skinnedMeshRenderer.bones = newBones;
+
+            return unmatchedBones;
         }
 
-        public static void RebindAndAdjustBones(SkinnedMeshRenderer skinnedMeshRenderer, Dictionary<Transform, Transform> rebindMap, PostRebindOperations postRebindOperations, TransformRepositionOption repositionBones, List<Transform> ignoreTransforms = null)
+        public static void RebindAndAdjustBones(List<SkinnedMeshRenderer> skinnedMeshRenderers, Dictionary<Transform, Transform> rebindMap, PostRebindOperations postRebindOperations, TransformRepositionOption repositionBones, List<Transform> ignoreTransforms = null)
         {
             Undo.SetCurrentGroupName("Rebind Bones");
             int undoGroup = Undo.GetCurrentGroup();
@@ -225,10 +239,31 @@ namespace Icyvarix.Multitool.Common
                 MatchTransforms(rebindMapFlipped);
             }
 
-            RebindBones(skinnedMeshRenderer, rebindMap);
+            List<Transform> unmatchedBones = new List<Transform>();
+
+            // Rebind all skinned mesh renderers, make sure that each bone matches at least one time.
+            for (int i = 0; i < skinnedMeshRenderers.Count; i++)
+            {
+                List<Transform> unmatchedBonesForMesh = RebindBones(skinnedMeshRenderers[i], rebindMap);
+                
+                if (i == 0)
+                {
+                    unmatchedBones = unmatchedBonesForMesh;
+                }
+                else
+                {
+                    unmatchedBones = unmatchedBones.Intersect(unmatchedBonesForMesh).ToList();
+                }
+            }
 
             // I don't know why but weird issues happen without this seperating the rebinding and the reparenting.
             Undo.CollapseUndoOperations(undoGroup);
+
+            // Throw the error after the undo collapse so the user can undo the operation.
+            if (unmatchedBones.Count > 0)
+            {
+                RaiseCritialError("[Logic Failure] Failed to match all bones in replace map. Unmatched bones: " + string.Join(", ", unmatchedBones.Select(bone => bone.name)));
+            }
 
             if (postRebindOperations != PostRebindOperations.None)
             {
@@ -264,7 +299,7 @@ namespace Icyvarix.Multitool.Common
             }
         }
 
-        public static Dictionary<Transform, Transform> GenerateAndValidateRebindMap(SkinnedMeshRenderer skinnedMeshRenderer, List<Transform> targetTransforms, DesiredBoneMatchOption boneMatchOption, PostRebindOperations postRebindOperations, List<Transform> ignoreTransforms, string targetBonePrefix, string meshBonePrefix)
+        public static Dictionary<Transform, Transform> GenerateAndValidateRebindMap(List<SkinnedMeshRenderer> skinnedMeshRenderers, List<Transform> targetTransforms, DesiredBoneMatchOption boneMatchOption, PostRebindOperations postRebindOperations, List<Transform> ignoreTransforms, string targetBonePrefix, string meshBonePrefix)
         {
             List<Transform> targetBones = new List<Transform>(targetTransforms);
             targetBones = AddAllChildren(targetBones);
@@ -291,8 +326,8 @@ namespace Icyvarix.Multitool.Common
                 RaiseBoneMatchError($"Target bones have duplicate names!\nDuplicate names: {duplicateNames}");
             }
 
-            List<Transform> meshBones = GetMeshBonesAsList(skinnedMeshRenderer, fullIgnoreTransforms, meshBonePrefix);
-
+            List<Transform> meshBones = GetAllMeshBonesAsList(skinnedMeshRenderers, fullIgnoreTransforms, meshBonePrefix);
+            
             // Two mesh bones should never have the same name.
             if (meshBones.Count != meshBones.Select(bone => bone.name).Distinct().Count())
             {
@@ -310,7 +345,10 @@ namespace Icyvarix.Multitool.Common
             try
             {
                 // Attempt to match target transforms to skinned mesh renderer bones
-                Dictionary<Transform, Transform> rebindMap = MatchToMeshBones(skinnedMeshRenderer, targetBones, boneMatchOption, ignoreTransforms, targetBonePrefix, meshBonePrefix);
+                Dictionary<Transform, Transform> rebindMap = MatchToMeshBones(skinnedMeshRenderers, targetBones, boneMatchOption, ignoreTransforms, targetBonePrefix, meshBonePrefix);
+
+                // Print number of bones we matched
+                Debug.Log($"Total matched bones: {rebindMap.Count}");
 
                 // Ensure all transforms in the mesh are in a continious hierarchy
                 // If they're not, it's going to mess up our child reparenting logic.

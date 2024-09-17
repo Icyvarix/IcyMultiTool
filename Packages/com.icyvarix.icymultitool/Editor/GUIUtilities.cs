@@ -2,6 +2,8 @@ using UnityEngine;
 using UnityEditor;
 using UnityEditorInternal;
 using System.Collections.Generic;
+using System;
+using System.Reflection;
 using UnityEngine.Animations;
 using VRC.SDK3.Dynamics.Constraint.Components;
 using VRC.Dynamics;
@@ -19,28 +21,27 @@ namespace Icyvarix.Multitool.Common
             return AssetDatabase.LoadAssetAtPath<Texture>(noodleImagePath);
         }
 
-        public static ReorderableList InitReorderableTransformList(List<Transform> transforms, string listName, string listDescription)
+        public static ReorderableList InitReorderableGUIList<T>(List<T> items, string listName, string listDescription) where T : UnityEngine.Object
         {
-            ReorderableList reorderableList = new ReorderableList(transforms, typeof(Transform), true, true, true, true);
+            ReorderableList reorderableList = new ReorderableList(items, typeof(T), true, true, true, true);
             reorderableList.drawHeaderCallback = (Rect rect) => {
                 EditorGUI.LabelField(rect, new GUIContent(listName, listDescription));
             };
 
             reorderableList.drawElementCallback = (Rect rect, int index, bool isActive, bool isFocused) => {
-                transforms[index] = (Transform)EditorGUI.ObjectField(
+                items[index] = (T)EditorGUI.ObjectField(
                     new Rect(rect.x, rect.y, rect.width, EditorGUIUtility.singleLineHeight),
-                    transforms[index],
-                    typeof(Transform),
+                    items[index],
+                    typeof(T),
                     true
                 );
             };
 
             reorderableList.onAddCallback = (ReorderableList list) => {
-                list.list.Add(null);  // Add null instead of trying to create a new Transform
+                list.list.Add(null);  // Add null for the new element
             };
 
             return reorderableList;
         }
-
     }
 }
