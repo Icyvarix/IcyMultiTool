@@ -129,13 +129,13 @@ namespace Icyvarix.Multitool.Tools
                     // Make sure there are no duplicate names in any of the transforms
                     if (parentHierarchyFiltered.Count != parentHierarchyFiltered.Select(bone => bone.name).Distinct().Count())
                     {
-                        string duplicateNames = string.Join(", ", parentHierarchyFiltered.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
+                        string duplicateNames = string.Join(", ", parentHierarchyFiltered.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).Take(10).ToArray());
                         RaiseBoneMatchError($"Parent hierarchy has duplicate transform names!\nDuplicate names: {duplicateNames}");
                     }
 
                     if (childHierarchyFiltered.Count != childHierarchyFiltered.Select(bone => bone.name).Distinct().Count())
                     {
-                        string duplicateNames = string.Join(", ", childHierarchyFiltered.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
+                        string duplicateNames = string.Join(", ", childHierarchyFiltered.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).Take(10).ToArray());
                         RaiseBoneMatchError($"Child hierarchy has duplicate transform names!\nDuplicate names: {duplicateNames}");
                     }
 
@@ -154,7 +154,7 @@ namespace Icyvarix.Multitool.Tools
 
                     if (prefabObjects.Count > 0)
                     {
-                        string prefabNames = string.Join(", ", prefabObjects.Select(t => t.name).ToArray());
+                        string prefabNames = string.Join(", ", prefabObjects.Select(t => t.name).Take(10).ToArray());
                         RaiseBoneMatchError("The following objects are part of a prefab and cannot be reparented: " + prefabNames);
                     }
                 }
