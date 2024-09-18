@@ -96,8 +96,8 @@ namespace Icyvarix.Multitool.Tools
             if (showAdvancedSettings)
             {
                 EditorGUI.indentLevel++;
-                targetBonePrefix = EditorGUILayout.TextField(new GUIContent("Target Bone Prefix", "All target bones that do not start with this string will be silently ignored for rebinding.\nIt is also ignored for matching."), targetBonePrefix);
-                meshBonePrefix = EditorGUILayout.TextField(new GUIContent("Mesh Bone Prefix", "All mesh bones that do not start with this string will be silently ignored for rebinding.\nIt is also ignored for matching."), meshBonePrefix);
+                targetBonePrefix = EditorGUILayout.TextField(new GUIContent("Target Bone Prefix", "All target bones that do not start with this string will be silently ignored for rebinding.\nIt is also stripped off when matching bones."), targetBonePrefix);
+                meshBonePrefix = EditorGUILayout.TextField(new GUIContent("Mesh Bone Prefix", "All mesh bones to be rebound must start with this string.\nIt is stripped off when matching mesh bones to targets."), meshBonePrefix);
                 EditorGUI.indentLevel--;
 
                 // Indent doesn't seem to affect the reorderable lists.

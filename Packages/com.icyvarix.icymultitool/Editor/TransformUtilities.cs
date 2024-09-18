@@ -50,6 +50,13 @@ namespace Icyvarix.Multitool.Common
             None
         }
 
+        public static string[] DesiredBoneMatchOptionStrings = new string[] { "By Exact Name", "By Closest Name" };
+        public enum DesiredBoneMatchOption
+        {
+            ByExactName,
+            ByClosestName
+        }
+
         public static Dictionary<Transform, Transform> MapTransformChildren(Transform receiver, Transform target, DesiredMatchOption option, List<Transform> ignoreTransforms)
         {
             if (receiver.childCount == 0 || target.childCount == 0)
@@ -373,13 +380,120 @@ namespace Icyvarix.Multitool.Common
             {
                 if (transforms[i].name.StartsWith(prefix))
                 {
-                    transforms.RemoveAt(i);
                     extracted.Add(transforms[i]);
+                    transforms.RemoveAt(i);
                 }
             }
 
             return extracted;
         }
+
+        public static List<Transform> ExtractTransformsMatchingRegex(List<Transform> transforms, string regex)
+        {
+            List<Transform> extracted = new List<Transform>();
+
+            for (int i = transforms.Count - 1; i >= 0; i--)
+            {
+                if (System.Text.RegularExpressions.Regex.IsMatch(transforms[i].name, regex))
+                {
+                    extracted.Add(transforms[i]);
+                    transforms.RemoveAt(i);
+                }
+            }
+
+            return extracted;
+        }
+
+        public static Dictionary<Transform, Transform> MatchTransformsByName(List<Transform> keyBones, List<Transform> targetBones, string keyBonePrefix, string targetBonePrefix, string keyBoneSuffix, string targetBoneSuffix, DesiredBoneMatchOption boneMatchOption)
+        {
+            // Two mesh bones should never have the same name.
+            if (keyBones.Count != keyBones.Select(bone => bone.name).Distinct().Count())
+            {
+                RaiseCritialError("[Logic Failure] Key bones have duplicate names in match function.");
+            }
+
+            // Nor should two target bones
+            if (targetBones.Count != targetBones.Select(bone => bone.name).Distinct().Count())
+            {
+                RaiseCritialError("[Logic Failure] Target bones have duplicate names in match function.");
+            }
+
+            // Get a List out of the skinnedMeshRenderer's bone names and the target bone names.
+            List<string> keyBoneNames = keyBones.Select(bone => bone.name).ToList();
+            List<string> targetBoneNames = targetBones.Select(bone => bone.name).ToList();
+
+            // Strip the prefixes from the bone names if they are defined.
+            if (targetBonePrefix != null)
+            {
+                if (!StripDefinedPrefix(targetBoneNames, targetBonePrefix))
+                {
+                    RaiseCritialError("[Logic Failure] Failed to strip target bone prefix in match transforms function.  Not all target bones have the required prefix.");
+                }
+            }
+
+            if (keyBonePrefix != null)
+            {
+                if (!StripDefinedPrefix(keyBoneNames, keyBonePrefix))
+                {
+                    RaiseCritialError("[Logic Failure] Failed to strip key bone prefix in match transforms function.  Not all key bones have the required prefix.");
+                }
+            }
+
+            // Strip the suffixes from the bone names if they are defined.
+            if (targetBoneSuffix != null)
+            {
+                if (!StripDefinedSuffix(targetBoneNames, targetBoneSuffix))
+                {
+                    RaiseCritialError("[Logic Failure] Failed to strip target bone suffix in match transforms function.  Not all target bones have the required suffix.");
+                }
+            }
+
+            if (keyBoneSuffix != null)
+            {
+                if (!StripDefinedSuffix(keyBoneNames, keyBoneSuffix))
+                {
+                    RaiseCritialError("[Logic Failure] Failed to strip key bone suffix in match transforms function.  Not all key bones have the required suffix.");
+                }
+            }
+
+            Dictionary<Transform, Transform> boneMap = new Dictionary<Transform, Transform>();
+
+            if (boneMatchOption == DesiredBoneMatchOption.ByClosestName)
+            {
+                Dictionary<string, string> boneNameMap = MatchByLongestSubstring(keyBoneNames, targetBoneNames);
+
+                for (int i = 0; i < keyBoneNames.Count; i++)
+                {
+                    string boneName = keyBoneNames[i];
+                    Transform bone = keyBones[i];
+
+                    if (boneNameMap.ContainsKey(boneName))
+                    {
+                        boneMap.Add(bone, targetBones[targetBoneNames.IndexOf(boneNameMap[boneName])]);
+                    }
+                }
+            }
+            else if (boneMatchOption == DesiredBoneMatchOption.ByExactName)
+            {
+                for (int i = 0; i < keyBoneNames.Count; i++)
+                {
+                    string boneName = keyBoneNames[i];
+                    Transform bone = keyBones[i];
+
+                    if (targetBoneNames.Contains(boneName))
+                    {
+                        boneMap.Add(bone, targetBones[targetBoneNames.IndexOf(boneName)]);
+                    }
+                }
+            }
+            else
+            {
+                RaiseCritialError("[Logic Failure] Invalid match option!");
+            }
+
+            return boneMap;
+        }
+
 
         // Matches each key in matchMap to the corresponding transform in the value of matchMap.
         // Sets global position, rotation, and scale of the key to the value.

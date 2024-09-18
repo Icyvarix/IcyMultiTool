@@ -11,13 +11,6 @@ namespace Icyvarix.Multitool.Common
 {   
     public class MeshUtilities
     {
-        public static string[] DesiredBoneMatchOptionStrings = new string[] { "By Exact Name", "By Closest Name" };
-        public enum DesiredBoneMatchOption
-        {
-            ByExactName,
-            ByClosestName
-        }
-
         public static string[] PostRebindOperationsStrings = new string[] { "Reparent + Cleanup", "Reparent Children", "None" };
         public enum PostRebindOperations
         {
@@ -110,75 +103,7 @@ namespace Icyvarix.Multitool.Common
 
             List<Transform> meshBones = GetAllMeshBonesAsList(skinnedMeshRenderers, ignoreTransforms, meshBonePrefix);
 
-            // Two mesh bones should never have the same name.
-            if (meshBones.Count != meshBones.Select(bone => bone.name).Distinct().Count())
-            {
-                RaiseCritialError("[Logic Failure] Mesh bones have duplicate names in mesh bone extraction function.");
-            }
-
-            // Nor should two target bones
-            if (targetBones.Count != targetBones.Select(bone => bone.name).Distinct().Count())
-            {
-                RaiseCritialError("[Logic Failure] Target bones have duplicate names in mesh bone extraction function.");
-            }
-
-            // Get a List out of the skinnedMeshRenderer's bone names and the target bone names.
-            List<string> skinnedMeshBoneNames = meshBones.Select(bone => bone.name).ToList();
-            List<string> targetBoneNames = targetBones.Select(bone => bone.name).ToList();
-
-            // Strip the prefixes from the bone names if they are defined.
-            if (targetBonePrefix != null)
-            {
-                if (!StripDefinedPrefix(targetBoneNames, targetBonePrefix))
-                {
-                    RaiseCritialError("[Logic Failure] Failed to strip target bone prefix in mesh bone extraction function.  Not all target bones have the required prefix.");
-                }
-            }
-
-            if (meshBonePrefix != null)
-            {
-                if (!StripDefinedPrefix(skinnedMeshBoneNames, meshBonePrefix))
-                {
-                    RaiseCritialError("[Logic Failure] Failed to strip mesh bone prefix in mesh bone extraction function.  Not all mesh bones have the required prefix.");
-                }
-            }
-
-            Dictionary<Transform, Transform> boneMap = new Dictionary<Transform, Transform>();
-
-            if (boneMatchOption == DesiredBoneMatchOption.ByClosestName)
-            {
-                Dictionary<string, string> boneNameMap = MatchByLongestSubstring(skinnedMeshBoneNames, targetBoneNames);
-
-                for (int i = 0; i < skinnedMeshBoneNames.Count; i++)
-                {
-                    string boneName = skinnedMeshBoneNames[i];
-                    Transform bone = meshBones[i];
-
-                    if (boneNameMap.ContainsKey(boneName))
-                    {
-                        boneMap.Add(bone, targetBones[targetBoneNames.IndexOf(boneNameMap[boneName])]);
-                    }
-                }
-            }
-            else if (boneMatchOption == DesiredBoneMatchOption.ByExactName)
-            {
-                for (int i = 0; i < skinnedMeshBoneNames.Count; i++)
-                {
-                    string boneName = skinnedMeshBoneNames[i];
-                    Transform bone = meshBones[i];
-
-                    if (targetBoneNames.Contains(boneName))
-                    {
-                        boneMap.Add(bone, targetBones[targetBoneNames.IndexOf(boneName)]);
-                    }
-                }
-            }
-            else
-            {
-                RaiseCritialError("[Logic Failure] Invalid match option in mesh bone extraction function.");
-            }
-
-            return boneMap;
+            return MatchTransformsByName(meshBones, targetBones, meshBonePrefix, targetBonePrefix, "", "", boneMatchOption);
         }
 
         // Rebinds the bones of a SkinnedMeshRenderer, replacing all keys of replaceMap with their corresponding values
@@ -315,35 +240,35 @@ namespace Icyvarix.Multitool.Common
                 targetBones = ExtractTransformsWithPrefix(targetBones, targetBonePrefix);
             }
 
-            // Remove ignoreTransforms from targetbones
-            targetBones = targetBones.Except(fullIgnoreTransforms).ToList();
-
-            // Make sure no two target bones have the same name.
-            if (targetBones.Count != targetBones.Select(bone => bone.name).Distinct().Count())
-            {
-                string duplicateNames = string.Join(", ", targetBones.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
-                // Raise match error with a message that lists all the duplicate names
-                RaiseBoneMatchError($"Target bones have duplicate names!\nDuplicate names: {duplicateNames}");
-            }
-
-            List<Transform> meshBones = GetAllMeshBonesAsList(skinnedMeshRenderers, fullIgnoreTransforms, meshBonePrefix);
-            
-            // Two mesh bones should never have the same name.
-            if (meshBones.Count != meshBones.Select(bone => bone.name).Distinct().Count())
-            {
-                string duplicateNames = string.Join(", ", meshBones.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
-                // Raise match error with a message that lists all the duplicate names
-                RaiseBoneMatchError($"Mesh bones have duplicate names!\nDuplicate names: {duplicateNames}");
-            }
-
-            // Print total mesh bones
-            Debug.Log($"Total eligible mesh bones: {meshBones.Count}");
-
-            // Print total target bones
-            Debug.Log($"Total eligible target bones: {targetBones.Count}");
-
             try
             {
+                // Remove ignoreTransforms from targetbones
+                targetBones = targetBones.Except(fullIgnoreTransforms).ToList();
+
+                // Make sure no two target bones have the same name.
+                if (targetBones.Count != targetBones.Select(bone => bone.name).Distinct().Count())
+                {
+                    string duplicateNames = string.Join(", ", targetBones.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
+                    // Raise match error with a message that lists all the duplicate names
+                    RaiseBoneMatchError($"Target bones have duplicate names!\nDuplicate names: {duplicateNames}");
+                }
+
+                List<Transform> meshBones = GetAllMeshBonesAsList(skinnedMeshRenderers, fullIgnoreTransforms, meshBonePrefix);
+                
+                // Two mesh bones should never have the same name.
+                if (meshBones.Count != meshBones.Select(bone => bone.name).Distinct().Count())
+                {
+                    string duplicateNames = string.Join(", ", meshBones.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
+                    // Raise match error with a message that lists all the duplicate names
+                    RaiseBoneMatchError($"Mesh bones have duplicate names!\nDuplicate names: {duplicateNames}");
+                }
+
+                // Print total mesh bones
+                Debug.Log($"Total eligible mesh bones: {meshBones.Count}");
+
+                // Print total target bones
+                Debug.Log($"Total eligible target bones: {targetBones.Count}");
+
                 // Attempt to match target transforms to skinned mesh renderer bones
                 Dictionary<Transform, Transform> rebindMap = MatchToMeshBones(skinnedMeshRenderers, targetBones, boneMatchOption, ignoreTransforms, targetBonePrefix, meshBonePrefix);
 
