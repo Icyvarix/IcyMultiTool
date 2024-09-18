@@ -120,6 +120,12 @@ namespace Icyvarix.Multitool.Tools
 
                 try
                 {
+                    // Make sure child and parent don't contain any of the same transforms
+                    if (childHierarchyFiltered.Any(child => parentHierarchyFiltered.Contains(child)))
+                    {
+                        RaiseBoneMatchError("Child hierarchy contains objects that are also in the parent hierarchy!");
+                    }
+
                     // Make sure there are no duplicate names in any of the transforms
                     if (parentHierarchyFiltered.Count != parentHierarchyFiltered.Select(bone => bone.name).Distinct().Count())
                     {
@@ -149,7 +155,7 @@ namespace Icyvarix.Multitool.Tools
                     if (prefabObjects.Count > 0)
                     {
                         string prefabNames = string.Join(", ", prefabObjects.Select(t => t.name).ToArray());
-                        throw new BoneMatchException("The following objects are part of a prefab and cannot be reparented: " + prefabNames);
+                        RaiseBoneMatchError("The following objects are part of a prefab and cannot be reparented: " + prefabNames);
                     }
                 }
                 catch ( BoneMatchException ) { return; }
