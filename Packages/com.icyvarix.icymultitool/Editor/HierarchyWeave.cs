@@ -120,6 +120,19 @@ namespace Icyvarix.Multitool.Tools
 
                 try
                 {
+                    // Make sure there are no duplicate names in any of the transforms
+                    if (parentHierarchyFiltered.Count != parentHierarchyFiltered.Select(bone => bone.name).Distinct().Count())
+                    {
+                        string duplicateNames = string.Join(", ", parentHierarchyFiltered.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
+                        RaiseBoneMatchError($"Parent hierarchy has duplicate transform names!\nDuplicate names: {duplicateNames}");
+                    }
+
+                    if (childHierarchyFiltered.Count != childHierarchyFiltered.Select(bone => bone.name).Distinct().Count())
+                    {
+                        string duplicateNames = string.Join(", ", childHierarchyFiltered.GroupBy(bone => bone.name).Where(group => group.Count() > 1).Select(group => group.Key).ToArray());
+                        RaiseBoneMatchError($"Child hierarchy has duplicate transform names!\nDuplicate names: {duplicateNames}");
+                    }
+
                     reparentMap = MatchTransformsByName(childHierarchyFiltered, parentHierarchyFiltered, childPrefix, parentPrefix, childSuffix, parentSuffix, boneMatchOption);
                 
                     List<GameObject> prefabObjects = new List<GameObject>();
