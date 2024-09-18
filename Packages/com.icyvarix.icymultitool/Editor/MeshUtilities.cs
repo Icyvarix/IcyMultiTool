@@ -312,21 +312,16 @@ namespace Icyvarix.Multitool.Common
                     }
                 }
 
-                // Ensure all transforms in the mesh are in a continious hierarchy
+                // Ensure all transforms in the mesh are in a continuous hierarchy
                 // If they're not, it's going to mess up our child reparenting logic.
                 if (postRebindOperations == PostRebindOperations.ReparentChildren || postRebindOperations == PostRebindOperations.ReparentChildrenAndCleanup)
                 {
                     bool isConnected;
                     List<Transform> missingTransforms = GetTransformsNeededForCompleteTree(rebindMap.Keys.ToList(), out isConnected);
 
-                    if (!isConnected)
-                    {
-                        RaiseBoneMatchError($"Not all mesh bones have a common root!\nSeperate hierarchies are not supported when reparent children mode is active.");
-                    }
-
                     if (missingTransforms != null)
                     {
-                        RaiseBoneMatchError($"Not all mesh bones are in a continious hierarchy!\nHoles are not supported when reparent children mode is active.\nMissing transforms: " + string.Join(", ", missingTransforms.Select(t => t.name)));
+                        RaiseBoneMatchError($"Not all mesh bones are in a continuous hierarchy!\nHoles are not supported when reparent children mode is active.\nMissing transforms: " + string.Join(", ", missingTransforms.Select(t => t.name)));
                     }
                 }
 
