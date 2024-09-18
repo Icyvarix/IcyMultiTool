@@ -5,11 +5,45 @@ using UnityEditor;
 using UnityEngine;
 using static Icyvarix.Multitool.Common.Utility;
 using static Icyvarix.Multitool.Common.StringUtilities;
+using System;
+using System.Text.RegularExpressions;
 
 namespace Icyvarix.Multitool.Common
 {
     public class StringUtilities
     {
+        // $oldname will be replaced with the old name.  $oldname[x:y] will be replaced with a substring of the old name.
+        public static string CalculateNewNameFromFormatString(string fmt, string oldname)
+        {
+            if (string.IsNullOrEmpty(fmt))
+                return oldname;
+
+            // Regex to find $oldname[x:y] patterns
+            string pattern = @"\$oldname\[(\d*):(\d*)\]";
+            string result = Regex.Replace(fmt, pattern, match =>
+            {
+                // Parse the start and end indices, defaulting to full range if blank
+                string startStr = match.Groups[1].Value;
+                string endStr = match.Groups[2].Value;
+
+                int start = string.IsNullOrEmpty(startStr) ? 0 : int.Parse(startStr);
+                int end = string.IsNullOrEmpty(endStr) ? oldname.Length : int.Parse(endStr);
+
+                // Clamp indices to valid range
+                start = Math.Max(0, Math.Min(start, oldname.Length));
+                end = Math.Max(start, Math.Min(end, oldname.Length));
+
+                // Extract the substring
+                string substring = oldname.Substring(start, end - start);
+                return substring;
+            });
+
+            // Replace all instances of $oldname with the full oldname
+            result = result.Replace("$oldname", oldname);
+
+            return result;
+        }
+
         public static (int, int) FindIndexOfStringWithLargestCommonSubstring(string targetString, string[] strings)
         {
             if (strings == null || strings.Length == 0 || targetString == null || targetString.Length == 0)

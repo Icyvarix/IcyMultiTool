@@ -23,7 +23,7 @@ namespace Icyvarix.Multitool.Tools
         SkinnedMeshRenderer skinnedMeshRenderer;
         Transform targetTransform;
         DesiredBoneMatchOption boneMatchOption = 0;
-        PostRebindOperations postRebindOperations = 0;
+        PostRebindOperations postRebindOperations = PostRebindOperations.ReparentChildren;
         TransformRepositionOption repositionBoneOption = 0;
         string targetBonePrefix;
         string meshBonePrefix;

@@ -9,6 +9,7 @@ using static Icyvarix.Multitool.Common.TransformUtilities;
 using static Icyvarix.Multitool.Common.MeshUtilities;
 using static Icyvarix.Multitool.Common.Utility;
 using static Icyvarix.Multitool.Common.GUIUtilities;
+using static Icyvarix.Multitool.Common.StringUtilities;
 
 namespace Icyvarix.Multitool.Tools
 {
@@ -34,11 +35,12 @@ namespace Icyvarix.Multitool.Tools
         // User Input Variables
         private ReferenceRetargetOption referenceRetargetOption = 0;
         private ParentOrChildOption componentHolder = 0;
-        private string childSuffix = " (E)";
+        private string newChildName = "$oldname";
+        private string newParentName = "$oldname (E)";
 
         // --------------------------------------------------------------
         // GUI
-        private const float baseHeight = 250;
+        private const float baseHeight = 280;
         private const float elementHeight = 23;
 
         private static string logoPath = "Packages/com.icyvarix.icymultitool/Resources/EncapsulateLogo.png";
@@ -74,7 +76,7 @@ namespace Icyvarix.Multitool.Tools
                 GUI.DrawTexture(imageRect, noodleDragon, ScaleMode.ScaleToFit);
             }
 
-            GUILayout.Label("Splits all selected objects into two.", EditorStyles.wordWrappedLabel);
+            GUILayout.Label("Splits all selected objects into a parent/child pair.", EditorStyles.wordWrappedLabel);
 
             GUILayout.Space(10);
             GUILayout.Label(new GUIContent("Reference Target", "What references should target the child."), EditorStyles.boldLabel);
@@ -85,7 +87,9 @@ namespace Icyvarix.Multitool.Tools
             componentHolder = (ParentOrChildOption)GUILayout.Toolbar((int)componentHolder, ParentOrChildOptionStrings, GUILayout.ExpandWidth(true));
 
             GUILayout.Space(10);
-            childSuffix = EditorGUILayout.TextField(new GUIContent("Child Suffix", "What to add to the child's name."), childSuffix);
+            GUILayout.Label(new GUIContent("Object Names", "What to name the objects after the operation is finished. $oldname will be replaced with the old name.  $oldname[x:y] will be replaced with a substring of the old name."), EditorStyles.boldLabel);
+            newParentName = EditorGUILayout.TextField(new GUIContent("Parent Name", "What to name the parent. $oldname will be replaced with the old name.  $oldname[x:y] will be replaced with a substring of the old name."), newParentName);
+            newChildName = EditorGUILayout.TextField(new GUIContent("Child Name", "What to name the child.  $oldname will be replaced with the old name.  $oldname[x:y] will be replaced with a substring of the old name."), newChildName);
 
             GUILayout.Space(10);
             if (GUILayout.Button("Encapsulate Selected"))
@@ -95,6 +99,18 @@ namespace Icyvarix.Multitool.Tools
                 {
                     EditorUtility.DisplayDialog("No Selection", "Please select at least one object to encapsulate.", "Very well.");
                     return;
+                }
+
+                if (referenceRetargetOption == ReferenceRetargetOption.RetargetAll)
+                {
+                    for (int i = 0; i < selected.Length; i++)
+                    {
+                        if (PrefabUtility.IsPartOfPrefabInstance(selected[i]))
+                        {
+                            EditorUtility.DisplayDialog("Invalid Selection", "Cannot use Retarget All on objects that are part of a prefab.", "Okay good.");
+                            return;
+                        }
+                    }
                 }
 
                 Undo.SetCurrentGroupName("Encapsulate Selected");
@@ -119,6 +135,9 @@ namespace Icyvarix.Multitool.Tools
             {
                 return;
             }
+            // Determine parent/child names.
+            string childName = CalculateNewNameFromFormatString(newChildName, target.name);
+            string parentName = CalculateNewNameFromFormatString(newParentName, target.name);
 
             // For readability and maintainability, we'll keep track of whether the child is new or not.
             // It could be inferred from the referenceRetarget option, but it's easier to read this way.
@@ -130,7 +149,7 @@ namespace Icyvarix.Multitool.Tools
             if (referenceRetarget == ReferenceRetargetOption.RetargetMeshes)
             {
                 // First we need to create our new object we're splitting into
-                GameObject child = new GameObject(target.name + childSuffix);
+                GameObject child = new GameObject(childName);
                 Undo.RegisterCreatedObjectUndo(child, "Encapsulate Selected");
                 childIsNew = true;
                 newObject = child;
@@ -171,6 +190,12 @@ namespace Icyvarix.Multitool.Tools
                         renderer.bones = newBones;
                     }
                 }
+
+                // Record target's state
+                Undo.RecordObject(target, "Encapsulate Selected");
+
+                // Finally we set the parent's name
+                target.name = parentName;
             }
             else if (referenceRetarget == ReferenceRetargetOption.RetargetAll)
             {
@@ -180,10 +205,13 @@ namespace Icyvarix.Multitool.Tools
 
                 // First we need to create our new object we're splitting into
                 // It takes the parent's name since the parent will get the new name.
-                GameObject replacer = new GameObject(target.name);
+                GameObject replacer = new GameObject(parentName);
                 Undo.RegisterCreatedObjectUndo(replacer, "Encapsulate Selected");
                 childIsNew = false;
                 newObject = replacer;
+
+                // Find target's position in its parents child order
+                int targetIndex = target.transform.GetSiblingIndex();
 
                 // Set the child parent to the target's parent through the undo system
                 Undo.SetTransformParent(replacer.transform, target.transform.parent, "Encapsulate Selected");
@@ -217,7 +245,10 @@ namespace Icyvarix.Multitool.Tools
                 target.transform.localScale = Vector3.one;
 
                 // Finally we set its name
-                target.name = target.name + childSuffix;
+                target.name = childName;
+
+                // And set the newObject's position in the hierarchy to match the old target's position
+                replacer.transform.SetSiblingIndex(targetIndex);
             }
             else
             {

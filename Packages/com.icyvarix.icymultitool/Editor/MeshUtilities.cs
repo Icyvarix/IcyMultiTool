@@ -350,6 +350,43 @@ namespace Icyvarix.Multitool.Common
                 // Print number of bones we matched
                 Debug.Log($"Total matched bones: {rebindMap.Count}");
 
+                // Make sure prefabs won't interfere with anything.
+                // Only care about children if it's reparent mode, and but care about the bones themselves if it's cleanup mode since we can't delete them if they're in a prefab.
+                if (postRebindOperations == PostRebindOperations.ReparentChildrenAndCleanup)
+                {
+                    // Make sure no mesh bones are in a prefab as otherwise we can't delete them
+                    List<Transform> prefabMeshBones = rebindMap.Keys.Where(bone => PrefabUtility.IsPartOfAnyPrefab(bone)).ToList();
+                    if (prefabMeshBones.Count > 0)
+                    {
+                        List<string> badBones = prefabMeshBones.Select(bone => bone.name).Take(10).ToList();
+
+                        if (prefabMeshBones.Count > 10)
+                        {
+                            badBones.Add("...");
+                        }
+
+                        RaiseBoneMatchError($"Some mesh bones are in a prefab!\nRebinding from prefab bones are not supported when cleanup is active.\nPrefab bones: {string.Join(", ", badBones)}");
+                    }
+                }
+                else if (postRebindOperations == PostRebindOperations.ReparentChildren)
+                {
+                    List<Transform> eligibleMeshBoneChildren = GetAllChildren(rebindMap.Keys.ToList());
+
+                    // Make sure no mesh bone children are in a prefab as otherwise we can't reparent them
+                    List<Transform> prefabMeshBones = eligibleMeshBoneChildren.Where(bone => PrefabUtility.IsPartOfAnyPrefab(bone)).ToList();
+                    if (prefabMeshBones.Count > 0)
+                    {
+                        List<string> badBones = prefabMeshBones.Select(bone => bone.name).Take(10).ToList();
+
+                        if (prefabMeshBones.Count > 10)
+                        {
+                            badBones.Add("...");
+                        }
+
+                        RaiseBoneMatchError($"Some mesh bone children are in a prefab!\nReparent children mode can not work on prefab bones.\nPrefab bones: {string.Join(", ", badBones)}");
+                    }
+                }
+
                 // Ensure all transforms in the mesh are in a continious hierarchy
                 // If they're not, it's going to mess up our child reparenting logic.
                 if (postRebindOperations == PostRebindOperations.ReparentChildren || postRebindOperations == PostRebindOperations.ReparentChildrenAndCleanup)
