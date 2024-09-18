@@ -33,6 +33,7 @@ namespace Icyvarix.Multitool.Tools
         private TopologyEnforcementSetting topologyEnforcementSetting = 0;
         private float targetSourceWeight = 1.0f;
         private float receiverSourceWeight = 0.0f;
+        private string nameFilterGUI = "";
         private List<Transform> ignoreTransformsGUI = new List<Transform>();
         private ReorderableList reorderableIgnoreList;
 
@@ -64,7 +65,7 @@ namespace Icyvarix.Multitool.Tools
 
         private void OnGUI()
         {
-            this.minSize = new Vector2(340, baseHeight + (Mathf.Max((showAdvancedSettings ? 4 : 0) + ignoreTransformsGUI.Count - 1, 0) * elementHeight));
+            this.minSize = new Vector2(340, baseHeight + (Mathf.Max((showAdvancedSettings ? 5 : 0) + ignoreTransformsGUI.Count - 1, 0) * elementHeight));
 
             // Stick me in there first so all the stuff gets drawn over me.
             if (noodleDragon != null)
@@ -99,6 +100,7 @@ namespace Icyvarix.Multitool.Tools
                 targetSourceWeight = EditorGUILayout.Slider(new GUIContent("Target Weight", "The weight of the target bone source in the constraint.  1 is full weight, 0 is no weight."), targetSourceWeight, 0, 1);
                 receiverSourceWeight = EditorGUILayout.Slider(new GUIContent("Receiver Weight", "Creates if non-zero.  The weight of the receiver bone source in the constraint.  1 is full weight, 0 is no weight."), receiverSourceWeight, 0, 1);
                 topologyEnforcementSetting = (TopologyEnforcementSetting)EditorGUILayout.Popup(new GUIContent("Topology Enforcement", "How to handle cases where the hierarchies don't match.  'Receiver Subset' means every bone in receiver is in target, 'Exact Match' requires every bone in both to have a match, 'None' will skip topology validation and just match the bones it can."), (int)topologyEnforcementSetting, topologyEnforcementSettingStrings);
+                nameFilterGUI = EditorGUILayout.TextField(new GUIContent("Name Filter", "Only apply constraints to bones with names that match this regular expression.  Leave blank to constrain all.  This does not affect hierarchy traversal.\n\n^ for start of name, $ for end, .* for wildcard.\n\nEx: $Def_.*.R$ will match everything that starts with Def_ and ends with .R"), nameFilterGUI);
                 EditorGUI.indentLevel--;
             }
 
@@ -126,7 +128,7 @@ namespace Icyvarix.Multitool.Tools
                     Undo.SetCurrentGroupName("Chain Constrain");
                     int undoGroup = Undo.GetCurrentGroup();
 
-                    ApplyConstraints(receiverRoot, targetRoot, cleanedIgnoreTransforms);
+                    ApplyConstraints(receiverRoot, targetRoot, cleanedIgnoreTransforms, nameFilterGUI);
 
                     Undo.CollapseUndoOperations(undoGroup);
                     Debug.Log("Constraints applied successfully.");
@@ -251,7 +253,7 @@ namespace Icyvarix.Multitool.Tools
         }
 
         // Recursive function to apply constraints to the bone hierarchy.
-        private void ApplyConstraints(Transform receiver, Transform target, List<Transform> ignoreTransforms)
+        private void ApplyConstraints(Transform receiver, Transform target, List<Transform> ignoreTransforms, string nameFilter)
         {
             if ( ignoreTransforms.Contains(receiver) || ignoreTransforms.Contains(target) )
             {
@@ -263,7 +265,13 @@ namespace Icyvarix.Multitool.Tools
 
             foreach (var pair in childMap)
             {
-                ApplyConstraints(pair.Key, pair.Value, ignoreTransforms);
+                ApplyConstraints(pair.Key, pair.Value, ignoreTransforms, nameFilter);
+            }
+
+            // If we have a name filter and it's not a match, don't constrain this bone.
+            if (nameFilter != "" && !System.Text.RegularExpressions.Regex.IsMatch(receiver.name, nameFilter))
+            {
+                return;
             }
 
             // Record our state before modifying it.
