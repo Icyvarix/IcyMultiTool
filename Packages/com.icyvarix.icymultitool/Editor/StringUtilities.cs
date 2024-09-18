@@ -68,9 +68,9 @@ namespace Icyvarix.Multitool.Common
                 biggestMaxLength = Mathf.Max(biggestMaxLength, maxLength);
                 
                 // Did not find a substring, so we failed to find a match.
-                if (maxLength == 0)
+                if (maxLength <= 0)
                 {
-                    return (-1, biggestMaxLength);
+                    return (-1, -1);
                 }
 
                 // Filter the candidates that have the maximum substring length
@@ -90,7 +90,7 @@ namespace Icyvarix.Multitool.Common
                 // If all remaining candidates are identical, we failed to find a clear winner.
                 else if (maxCandidates.All(kvp => kvp.Value == maxCandidates.First().Value))
                 {
-                    return (-1, biggestMaxLength);
+                    return (maxCandidates.First().Key, biggestMaxLength); // Just return the first one, it's a tie.
                 }
                 else
                 {
