@@ -5,8 +5,6 @@ using System.Collections.Generic;
 using System;
 using System.Reflection;
 using UnityEngine.Animations;
-using VRC.SDK3.Dynamics.Constraint.Components;
-using VRC.Dynamics;
 using static Icyvarix.Multitool.Common.TransformUtilities;
 using static Icyvarix.Multitool.Common.Utility;
 

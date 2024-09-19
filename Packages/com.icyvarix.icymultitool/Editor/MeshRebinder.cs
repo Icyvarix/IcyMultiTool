@@ -3,7 +3,6 @@ using UnityEditor;
 using UnityEditorInternal;
 using System.Collections.Generic;
 using UnityEngine.Animations;
-using VRC.Dynamics;
 using System.Linq;
 using static Icyvarix.Multitool.Common.TransformUtilities;
 using static Icyvarix.Multitool.Common.MeshUtilities;

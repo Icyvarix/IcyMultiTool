@@ -26,11 +26,20 @@ namespace Icyvarix.Multitool.Common
             ByOrder
         }
 
-        public static string[] ConstraintSpaceOptionStrings = new string[] { "VRC World Space", "VRC Local Space", "Unity World Space" };
+        public static string[] ConstraintSpaceOptionStrings = new string[] { 
+#if HAS_VRC_CONSTRAINTS
+            "VRC World Space", 
+            "VRC Local Space", 
+#endif
+            "Unity World Space" 
+            };
+        
         public enum ConstraintSpaceOption
         {
+#if HAS_VRC_CONSTRAINTS
             World,
             Local,
+#endif
             UnityWorld
         }
 

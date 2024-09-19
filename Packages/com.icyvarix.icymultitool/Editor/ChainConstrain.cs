@@ -3,11 +3,14 @@ using UnityEditor;
 using UnityEditorInternal;
 using System.Collections.Generic;
 using UnityEngine.Animations;
-using VRC.SDK3.Dynamics.Constraint.Components;
-using VRC.Dynamics;
 using static Icyvarix.Multitool.Common.TransformUtilities;
 using static Icyvarix.Multitool.Common.Utility;
 using static Icyvarix.Multitool.Common.GUIUtilities;
+
+#if HAS_VRC_CONSTRAINTS
+using VRC.SDK3.Dynamics.Constraint.Components;
+using VRC.Dynamics;
+#endif
 
 namespace Icyvarix.Multitool.Tools
 {
@@ -93,6 +96,10 @@ namespace Icyvarix.Multitool.Tools
             childMatchOption = (DesiredMatchOption)EditorGUILayout.Popup(new GUIContent("Child Matching", "Choose how to match cases of multiple children when applying constraints. 'By name' uses name similarity, 'By order' uses the order in the hierarchy."), (int)childMatchOption, DesiredMatchOptionStrings);
             constraintSpaceOption = (ConstraintSpaceOption)EditorGUILayout.Popup(new GUIContent("Implementation", "How the constraint is implemented.  Local space is relative to the parent, World is relative to the world origin."), (int)constraintSpaceOption, ConstraintSpaceOptionStrings);
             
+#if !HAS_VRC_CONSTRAINTS
+            GUILayout.Label("VRChat SDK3 Constraints are not available.  You need the VRChat SDK version 3.7.0 or greater to use that feature.", EditorStyles.wordWrappedLabel);
+#endif
+
             showAdvancedSettings = EditorGUILayout.Foldout(showAdvancedSettings, "Advanced Settings", true);
             if (showAdvancedSettings)
             {
@@ -284,7 +291,11 @@ namespace Icyvarix.Multitool.Tools
             }
             else
             {
+#if HAS_VRC_CONSTRAINTS
                 ApplyVRCConstraint(constraintType, receiver, target, constraintSpaceOption == ConstraintSpaceOption.Local);
+#else
+                RaiseCritialError("VRChat SDK3 Constraints are not available.  You need the VRChat SDK version 3.7.0 or greater to use that feature.");
+#endif
             }
         }
 
@@ -320,6 +331,7 @@ namespace Icyvarix.Multitool.Tools
             }
         }
 
+#if HAS_VRC_CONSTRAINTS
         // Applies the desired VRChat constraint type to the receiver bone, constraining it to the target bone.
         private void ApplyVRCConstraint(DesiredConstraintType type, Transform receiver, Transform target, bool useLocalSpace)
         {
@@ -368,5 +380,6 @@ namespace Icyvarix.Multitool.Tools
             newConstraint.Locked = true;
             newConstraint.SolveInLocalSpace = useLocalSpace;
         }
+#endif
     }
 }
