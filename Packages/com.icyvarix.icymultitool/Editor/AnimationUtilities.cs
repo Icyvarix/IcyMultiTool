@@ -183,5 +183,40 @@ namespace Icyvarix.Multitool.Common
             // Save all modified assets
             AssetDatabase.SaveAssets();
         }
+
+        public static void AddAllAnimationsInFolder(string path, List<AnimationClip> animationList)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return;
+            }
+
+            // Reduce the path to just the project relative path
+            path = path.Replace(Application.dataPath, "Assets");
+
+            // Find all animations that are in the selected folder, but not any of the child folders
+            string[] guids = AssetDatabase.FindAssets("t:AnimationClip", new string[] { path });
+
+            foreach (string guid in guids)
+            {
+                string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+
+                if (IsDirectlyInFolder(assetPath, path))
+                {
+                    AnimationClip clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(assetPath);
+                    animationList.Add(clip);
+                }
+            }
+        }
+
+        private static bool IsDirectlyInFolder(string assetPath, string folderPath)
+        {
+            // Normalize paths to avoid issues with slashes
+            folderPath = folderPath.TrimEnd('/') + "/";
+
+            // Check if the asset's immediate parent directory matches the folder path
+            string assetParentFolder = System.IO.Path.GetDirectoryName(assetPath).Replace("\\", "/") + "/";
+            return assetParentFolder == folderPath;
+        }
     }
 }

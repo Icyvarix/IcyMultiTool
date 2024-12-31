@@ -96,28 +96,7 @@ namespace Icyvarix.Multitool.Tools
 
             if (GUILayout.Button("Add All Animations in Folder"))
             {
-                string path = EditorUtility.OpenFolderPanel("Select Folder", "", "");
-                if (string.IsNullOrEmpty(path))
-                {
-                    return;
-                }
-
-                // Reduce the path to just the project relative path
-                path = path.Replace(Application.dataPath, "Assets");
-
-                // Find all animations that are in the selected folder, but not any of the child folders
-                string[] guids = AssetDatabase.FindAssets("t:AnimationClip", new string[] { path });
-
-                foreach (string guid in guids)
-                {
-                    string assetPath = AssetDatabase.GUIDToAssetPath(guid);
-
-                    if (IsDirectlyInFolder(assetPath, path))
-                    {
-                        AnimationClip clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(assetPath);
-                        targetAnimations.Add(clip);
-                    }
-                }
+                AddAllAnimationsInFolder(EditorUtility.OpenFolderPanel("Select Folder", "", ""), targetAnimations);
             }
 
             GUILayout.Space(10);
@@ -173,16 +152,6 @@ namespace Icyvarix.Multitool.Tools
 
                 RetargetAnimations(sourceRegex, rootObject, cleanedTargetTransforms, cleanedAnimationList, effectMode);
             }
-        }
-
-        private static bool IsDirectlyInFolder(string assetPath, string folderPath)
-        {
-            // Normalize paths to avoid issues with slashes
-            folderPath = folderPath.TrimEnd('/') + "/";
-
-            // Check if the asset's immediate parent directory matches the folder path
-            string assetParentFolder = System.IO.Path.GetDirectoryName(assetPath).Replace("\\", "/") + "/";
-            return assetParentFolder == folderPath;
         }
     }
 }
